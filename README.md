@@ -1,5 +1,7 @@
 # WordPDFer
 
+**Live demo → https://ahzs645.github.io/wordpdfer/**
+
 Turn a **fillable PDF (AcroForm)** into a **fill-in-Word document that keeps the exact form layout** — entirely in the browser. No server, no upload; your PDF never leaves the device.
 
 The idea: Word isn't a fixed-layout format, so converting a form's *content* always risks reflow. Instead this app renders each PDF page to an image, **locks that image as the page background**, and drops an **absolutely-positioned text box over every form field**. The layout physically cannot move, and you can type into every field — in the browser or later in Word.
