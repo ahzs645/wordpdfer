@@ -11,6 +11,7 @@ import { buildDocx } from "./lib/docx";
 import { groupWidgets, widgetGroupIndex, type FieldGroup } from "./lib/fields";
 import { fillPdf } from "./lib/fillPdf";
 import { parsePdf } from "./lib/pdf";
+import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { downloadBlob } from "./lib/download";
 import type { FieldWidget, FillValues, ParsedPdf } from "./lib/types";
 
@@ -77,7 +78,10 @@ export default function App() {
     setError(null);
     setStatus("Reading PDF…");
     try {
-      const result = await parsePdf(raw, fileName, { onProgress: setStatus });
+      const result = await parsePdf(raw, fileName, {
+        workerSrc: workerUrl,
+        onProgress: setStatus,
+      });
       const seed: FillValues = {};
       for (const w of result.widgets) {
         if ((w.kind === "text" || w.kind === "dropdown") && w.defaultText) {

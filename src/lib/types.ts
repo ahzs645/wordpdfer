@@ -65,3 +65,25 @@ export interface ParsedPdf {
  *  - checkbox / radio → boolean (is this widget checked?)
  */
 export type FillValues = Record<string, string | boolean>;
+
+/** One independently emitted Word run. Keep template tags in their own runs. */
+export interface DocxOverlayRun {
+  text: string;
+  bold?: boolean;
+  font?: string;
+  /** Word font size in half-points. */
+  size?: number;
+}
+
+/** Rich content for a positioned Word overlay. */
+export interface DocxOverlayContent {
+  runs: DocxOverlayRun[];
+}
+
+/**
+ * Values accepted by the Word renderer. Strings and booleans preserve the
+ * original fill-in app behavior; rich content supports template engines such
+ * as Docmosis without splitting control tags across Word runs.
+ */
+export type DocxOverlayValue = string | boolean | DocxOverlayContent;
+export type DocxOverlayValues = Record<string, DocxOverlayValue>;

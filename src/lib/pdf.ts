@@ -1,13 +1,14 @@
 // PDF loading, page rasterization, and AcroForm widget extraction — all in-browser via pdf.js.
 import * as pdfjsLib from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { FieldWidget, PageInfo, ParsedPdf, Rect } from "./types";
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 export interface ParseOptions {
   /** Rasterization scale for the background image. 2 ≈ 144 DPI, crisp for print without bloating the .docx. */
   renderScale?: number;
+  /** Public URL for pdf.js' module worker. Required when the host has not configured pdf.js globally. */
+  workerSrc?: string;
+  /** Optional public URL for pdf.js standard fonts (must end with a slash). */
+  standardFontDataUrl?: string;
   onProgress?: (msg: string) => void;
 }
 
@@ -23,11 +24,21 @@ export async function parsePdf(
   const renderScale = opts.renderScale ?? 2;
   const report = opts.onProgress ?? (() => {});
 
+  if (opts.workerSrc) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = opts.workerSrc;
+  }
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    throw new Error(
+      "pdf.js worker is not configured. Pass ParseOptions.workerSrc or set GlobalWorkerOptions.workerSrc before parsing.",
+    );
+  }
+
   // pdf.js detaches the buffer it is given; hand it a copy and keep `raw` pristine.
   const doc = await pdfjsLib.getDocument({
     data: new Uint8Array(raw.slice(0)),
     useSystemFonts: true,
     isEvalSupported: false,
+    ...(opts.standardFontDataUrl ? { standardFontDataUrl: opts.standardFontDataUrl } : {}),
   }).promise;
 
   const pages: PageInfo[] = [];

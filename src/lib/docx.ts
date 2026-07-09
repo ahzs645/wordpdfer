@@ -22,7 +22,15 @@ import {
   type IParagraphOptions,
   type ISectionOptions,
 } from "docx";
-import type { FieldWidget, FillValues, PageInfo, ParsedPdf } from "./types";
+import type {
+  DocxOverlayContent,
+  DocxOverlayRun,
+  DocxOverlayValue,
+  DocxOverlayValues,
+  FieldWidget,
+  PageInfo,
+  ParsedPdf,
+} from "./types";
 
 export interface DocxOptions {
   /** Word font used for filled text (Helvetica ≈ Arial). */
@@ -40,7 +48,7 @@ const PAD_TWIP = 22; // small left/right inset so text doesn't hug the field edg
 /** Assemble the Word document model (no packing) — shared by the browser and tests. */
 export function buildDocxDocument(
   parsed: ParsedPdf,
-  values: FillValues,
+  values: DocxOverlayValues,
   options: DocxOptions = {},
 ): Document {
   const opts: Required<DocxOptions> = {
@@ -70,7 +78,7 @@ export function buildDocxDocument(
 
 export async function buildDocx(
   parsed: ParsedPdf,
-  values: FillValues,
+  values: DocxOverlayValues,
   options: DocxOptions = {},
 ): Promise<Blob> {
   return Packer.toBlob(buildDocxDocument(parsed, values, options));
@@ -79,7 +87,7 @@ export async function buildDocx(
 function buildSection(
   page: PageInfo,
   widgets: FieldWidget[],
-  values: FillValues,
+  values: DocxOverlayValues,
   opts: Required<DocxOptions>,
 ): ISectionOptions {
   const children: Paragraph[] = [backgroundParagraph(page)];
@@ -145,26 +153,29 @@ function backgroundParagraph(page: PageInfo): Paragraph {
 
 function fieldParagraph(
   w: FieldWidget,
-  value: string | boolean | undefined,
+  value: DocxOverlayValue | undefined,
   opts: Required<DocxOptions>,
 ): Paragraph | null {
   if (w.kind === "checkbox" || w.kind === "radio") {
-    const checked = value === true;
-    if (!checked && !opts.outlineFields) return null;
-    return checkParagraph(w, checked, opts);
+    if (typeof value === "boolean" || value === undefined) {
+      const checked = value === true;
+      if (!checked && !opts.outlineFields) return null;
+      return checkParagraph(w, checked ? [{ text: opts.checkGlyph, bold: true }] : [], opts);
+    }
+    return checkParagraph(w, overlayRuns(value), opts);
   }
   // text / dropdown
-  const text = typeof value === "string" ? value : "";
-  if (!text && !opts.outlineFields) {
+  const runs = overlayRuns(value);
+  if (runs.length === 0 && !opts.outlineFields) {
     // Still emit an (invisible) frame so the field can be typed into in Word.
-    return textParagraph(w, "", opts);
+    return textParagraph(w, [], opts);
   }
-  return textParagraph(w, text, opts);
+  return textParagraph(w, runs, opts);
 }
 
 function textParagraph(
   w: FieldWidget,
-  text: string,
+  runs: DocxOverlayRun[],
   opts: Required<DocxOptions>,
 ): Paragraph {
   const xTw = Math.round(w.rect.x * TWIP_PER_PT) + PAD_TWIP;
@@ -189,16 +200,14 @@ function textParagraph(
       ? { before: 0, after: 0 }
       : { before: 0, after: 0, line: hTw, lineRule: LineRuleType.EXACT },
     border: opts.outlineFields ? outlineBorder() : undefined,
-    children: text
-      ? [new TextRun({ text, font: opts.fieldFont, size: sizeHalfPt })]
-      : [],
+    children: renderOverlayRuns(runs, opts.fieldFont, sizeHalfPt),
   };
   return new Paragraph(base);
 }
 
 function checkParagraph(
   w: FieldWidget,
-  checked: boolean,
+  runs: DocxOverlayRun[],
   opts: Required<DocxOptions>,
 ): Paragraph {
   const xTw = Math.round(w.rect.x * TWIP_PER_PT);
@@ -220,9 +229,7 @@ function checkParagraph(
     alignment: AlignmentType.CENTER,
     spacing: { before: 0, after: 0, line: hTw, lineRule: LineRuleType.EXACT },
     border: opts.outlineFields ? outlineBorder() : undefined,
-    children: checked
-      ? [new TextRun({ text: opts.checkGlyph, font: opts.fieldFont, size: sizeHalfPt, bold: true })]
-      : [],
+    children: renderOverlayRuns(runs, opts.fieldFont, sizeHalfPt),
   });
 }
 
@@ -246,6 +253,30 @@ function outlineBorder() {
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
+}
+
+function overlayRuns(value: DocxOverlayValue | undefined): DocxOverlayRun[] {
+  if (typeof value === "string") return value ? [{ text: value }] : [];
+  if (value && typeof value === "object" && Array.isArray((value as DocxOverlayContent).runs)) {
+    return (value as DocxOverlayContent).runs.filter((run) => run.text.length > 0);
+  }
+  return [];
+}
+
+function renderOverlayRuns(
+  runs: DocxOverlayRun[],
+  defaultFont: string,
+  defaultSize: number,
+): TextRun[] {
+  return runs.map(
+    (run) =>
+      new TextRun({
+        text: run.text,
+        bold: run.bold,
+        font: run.font ?? defaultFont,
+        size: run.size ?? defaultSize,
+      }),
+  );
 }
 
 export function dataUrlToUint8(dataUrl: string): Uint8Array {

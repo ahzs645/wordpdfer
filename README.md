@@ -4,6 +4,42 @@
 
 Turn a **fillable PDF (AcroForm)** into a **fill-in-Word document that keeps the exact form layout** — entirely in the browser. No server, no upload; your PDF never leaves the device.
 
+WordPDFer is also a source-first TypeScript package. Applications can call the
+PDF-to-DOCX pipeline directly while keeping all rasterization and positioned
+Word-overlay behavior in this repository.
+
+## Package API
+
+Install or link the package, then provide a public pdf.js worker URL:
+
+```ts
+import { pdfToDocx } from "wordpdfer";
+
+const { blob, parsed } = await pdfToDocx(pdfBytes, "intake.pdf", {
+  parse: { workerSrc: "/pdf.worker.mjs" },
+  docx: { outlineFields: false },
+  resolveValue: (widget) =>
+    widget.kind === "text" ? `Value for ${widget.name}` : false,
+});
+```
+
+For template engines, `resolveValue` may return rich overlay content. Every
+entry in `runs` is emitted as one Word run, so control tags remain contiguous:
+
+```ts
+resolveValue: (widget) => ({
+  runs: [
+    { text: `<<cs_{fields.${widget.name}==true}>>` },
+    { text: "X", bold: true },
+    { text: "<<es_>>" },
+  ],
+})
+```
+
+The public package exports `pdfToDocx`, `parsePdf`, `buildDocx`, the document
+model builder, and their TypeScript types. The hosted React app consumes the
+same library modules.
+
 The idea: Word isn't a fixed-layout format, so converting a form's *content* always risks reflow. Instead this app renders each PDF page to an image, **locks that image as the page background**, and drops an **absolutely-positioned text box over every form field**. The layout physically cannot move, and you can type into every field — in the browser or later in Word.
 
 ## How it works
@@ -24,6 +60,7 @@ Coordinates convert as: PDF points → top-left origin via the page viewport →
 npm install
 npm run dev      # http://localhost:5173
 npm run build    # type-check + production bundle in dist/
+npm test         # package-level Word/OOXML tests
 ```
 
 Open the app, click **Try the sample form** (a 2-page, 265-field allergy record) or drop your own PDF, fill it in, and download **Word (.docx)** or **Filled PDF**.
