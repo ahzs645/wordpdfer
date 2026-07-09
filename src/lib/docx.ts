@@ -127,6 +127,7 @@ function backgroundParagraph(page: PageInfo): Paragraph {
   return new Paragraph({
     children: [
       new ImageRun({
+        type: "png",
         data: dataUrlToUint8(page.pngDataUrl),
         transformation: {
           width: Math.round(page.widthPt * PX96_PER_PT),
