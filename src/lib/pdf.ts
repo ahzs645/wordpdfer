@@ -1,5 +1,9 @@
 // PDF loading, page rasterization, and AcroForm widget extraction — all in-browser via pdf.js.
-import * as pdfjsLib from "pdfjs-dist";
+// The legacy build is the one pdf.js supports on its documented minimum browsers
+// (the modern build targets only the latest releases). The worker passed in
+// `workerSrc` must come from the same pdfjs-dist version.
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
+import type { PageViewport } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { FieldWidget, PageInfo, ParsedPdf, Rect } from "./types";
 
 export interface ParseOptions {
@@ -9,6 +13,11 @@ export interface ParseOptions {
   workerSrc?: string;
   /** Optional public URL for pdf.js standard fonts (must end with a slash). */
   standardFontDataUrl?: string;
+  /**
+   * Optional public URL for pdf.js' wasm decoders (JBIG2, JPEG 2000, ICC colour
+   * management), i.e. the contents of `pdfjs-dist/wasm/` (must end with a slash).
+   */
+  wasmUrl?: string;
   onProgress?: (msg: string) => void;
 }
 
@@ -34,13 +43,27 @@ export async function parsePdf(
   }
 
   // pdf.js detaches the buffer it is given; hand it a copy and keep `raw` pristine.
-  const doc = await pdfjsLib.getDocument({
+  const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(raw.slice(0)),
     useSystemFonts: true,
-    isEvalSupported: false,
     ...(opts.standardFontDataUrl ? { standardFontDataUrl: opts.standardFontDataUrl } : {}),
-  }).promise;
+    ...(opts.wasmUrl ? { wasmUrl: opts.wasmUrl } : {}),
+  });
+  try {
+    const { pages, widgets } = await readDocument(await loadingTask.promise, renderScale, report);
+    report("Done.");
+    return { fileName, pages, widgets, raw };
+  } finally {
+    // Releases the document and its worker; everything returned above is plain data.
+    await loadingTask.destroy();
+  }
+}
 
+async function readDocument(
+  doc: pdfjsLib.PDFDocumentProxy,
+  renderScale: number,
+  report: (msg: string) => void,
+): Promise<{ pages: PageInfo[]; widgets: FieldWidget[] }> {
   const pages: PageInfo[] = [];
   const widgets: FieldWidget[] = [];
 
@@ -58,7 +81,7 @@ export async function parsePdf(
     if (!ctx) throw new Error("Could not get a 2D canvas context.");
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvasContext: ctx, viewport: renderViewport }).promise;
+    await page.render({ canvas, viewport: renderViewport }).promise;
     const pngDataUrl = canvas.toDataURL("image/png");
 
     pages.push({
@@ -123,16 +146,13 @@ export async function parsePdf(
     }
   }
 
-  report("Done.");
-  return { fileName, pages, widgets, raw };
+  return { pages, widgets };
 }
 
 /** Convert a PDF-space rect [x0,y0,x1,y1] to a top-left-origin rect in points, honoring page rotation. */
-function viewportRect(
-  viewport: { convertToViewportRectangle: (r: number[]) => number[] },
-  pdfRect: number[],
-): Rect {
-  const [a, b, c, d] = viewport.convertToViewportRectangle(pdfRect);
+function viewportRect(viewport: PageViewport, pdfRect: number[]): Rect {
+  const [a, b] = viewport.convertToViewportPoint(pdfRect[0], pdfRect[1]);
+  const [c, d] = viewport.convertToViewportPoint(pdfRect[2], pdfRect[3]);
   const x = Math.min(a, c);
   const y = Math.min(b, d);
   return { x, y, w: Math.abs(c - a), h: Math.abs(d - b) };

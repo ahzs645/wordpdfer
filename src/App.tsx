@@ -11,7 +11,7 @@ import { buildDocx } from "./lib/docx";
 import { groupWidgets, widgetGroupIndex, type FieldGroup } from "./lib/fields";
 import { fillPdf } from "./lib/fillPdf";
 import { parsePdf } from "./lib/pdf";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { downloadBlob } from "./lib/download";
 import type { FieldWidget, FillValues, ParsedPdf } from "./lib/types";
 
