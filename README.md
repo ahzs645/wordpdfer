@@ -10,13 +10,24 @@ Word-overlay behavior in this repository.
 
 ## Package API
 
-Install or link the package, then provide a public pdf.js worker URL:
+Install or link the package, then provide a public pdf.js worker URL. The
+worker must come from the same `pdfjs-dist` version WordPDFer depends on
+(pinned exactly, currently 6.3.289); pdf.js refuses to run an API against a
+worker of another version. Use the `legacy` worker
+(`pdfjs-dist/legacy/build/pdf.worker.min.mjs`) to match the legacy pdf.js
+build WordPDFer imports. `wasmUrl` points at a copy of `pdfjs-dist/wasm/` and
+is needed for JBIG2, JPEG 2000 and ICC-profiled images; `standardFontDataUrl`
+points at `pdfjs-dist/standard_fonts/`.
 
 ```ts
 import { pdfToDocx } from "wordpdfer";
 
 const { blob, parsed } = await pdfToDocx(pdfBytes, "intake.pdf", {
-  parse: { workerSrc: "/pdf.worker.mjs" },
+  parse: {
+    workerSrc: "/pdf.worker.mjs",
+    wasmUrl: "/vendor/pdfjs/wasm/",
+    standardFontDataUrl: "/vendor/pdfjs/standard_fonts/",
+  },
   docx: { outlineFields: false },
   resolveValue: (widget) =>
     widget.kind === "text" ? `Value for ${widget.name}` : false,
